@@ -277,6 +277,7 @@ class LayerControls(BaseGUI):
             show_info(
                 f"nnInteractive: segmenting at level {_level} "
                 f"({' x '.join(str(int(s)) for s in _shape)} px)"
+            )
         
 
         self.source_cfg = {
