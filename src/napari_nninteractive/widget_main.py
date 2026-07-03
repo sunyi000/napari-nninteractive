@@ -519,9 +519,39 @@ class nnInteractiveWidget(LayerControls):
         """Construct the local inference session from self.checkpoint_path."""
         # Heavy, local-only dependencies (the nnInteractive[local] extra). Imported
         # here so remote-only installs never need torch / nnU-Net.
-        import torch
-        from batchgenerators.utilities.file_and_folder_operations import join, load_json
-        from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
+        #
+        # ALWAYS surface the underlying error: an ImportError here is often NOT a
+        # missing install but a torch/torchvision/numpy the user changed themselves
+        # that now fails to import. Hiding the reason behind a generic "install the
+        # local extra" message sends them chasing the wrong fix.
+        try:
+            import torch
+            from batchgenerators.utilities.file_and_folder_operations import (
+                join,
+                load_json,
+            )
+            from nnunetv2.utilities.find_class_by_name import (
+                recursive_find_python_class,
+            )
+        except ImportError as cause:
+            message = (
+                "The local nnInteractive backend could not be imported. The "
+                "underlying error was:\n\n"
+                f"    {type(cause).__name__}: {cause}\n\n"
+                "If this mentions torch, torchvision or numpy, a Python package in "
+                "this environment (often one you installed manually) is broken or "
+                "mismatched -- fix or uninstall that package.\n\n"
+                "Otherwise the local extra may not be installed. Install it, then "
+                "restart napari:\n"
+                "    pip install 'nnInteractive[local]'"
+            )
+            _show_scrollable_error(
+                self, "nnInteractive — local backend unavailable", message
+            )
+            raise RuntimeError(
+                "The local nnInteractive backend could not be imported (see the "
+                "dialog). Fix the broken package or install the local extra."
+            ) from cause
 
         # Get inference class from Checkpoint
         if Path(self.checkpoint_path).joinpath("inference_session_class.json").is_file():
