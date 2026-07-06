@@ -116,8 +116,11 @@ class BaseGUI(QWidget):
         # 'nninteractive-client' install cannot run it, so we start in Remote
         # mode and disable the Local controls (see _init_model_selection).
         self._local_available = _local_inference_available()
-        self._remote_mode = not self._local_available
         self._settings = QSettings("MIC-DKFZ", "napari-nninteractive")
+        # Restore the last-used inference mode. A saved "local" is ignored when local
+        # inference is not installed; the default (no saved value) is local when
+        # available, remote otherwise.
+        self._remote_mode = self._restore_remote_mode()
 
         # Be transparent on start-up: tell remote-only users why local inference
         # is off and how to enable it, so a missing Local button is never a mystery.
@@ -141,6 +144,7 @@ class BaseGUI(QWidget):
         _interact_layout.addWidget(self._init_init_buttons())  # Initialize with Segmentation
         _interact_layout.addWidget(self._init_prompt_selection())  # Prompt Selection
         _interact_layout.addWidget(self._init_interaction_selection())  # Interaction Tools
+        _interact_layout.addWidget(self._init_manual_control())  # Manual Control
         _interact_layout.addWidget(self._init_label_aggregation())  # Label Aggregation
         _interact_layout.addWidget(self._init_export_button())  # Export
         _ = setup_acknowledgements(_interact_layout, width=self._width)  # Acknowledgements
@@ -259,6 +263,8 @@ class BaseGUI(QWidget):
         self.class_for_init.setEnabled(False)
         self.auto_refine.setEnabled(False)
         self.load_mask_btn.setEnabled(False)
+        self.auto_run_ckbx.setEnabled(False)
+        self.run_button.setEnabled(False)
 
     def _set_interaction_button_support(self, supported: dict[int, bool]) -> None:
         """Enable/disable interaction tool buttons and keep a valid active selection."""
@@ -293,6 +299,19 @@ class BaseGUI(QWidget):
         self.class_for_init.setEnabled(True)
         self.auto_refine.setEnabled(True)
         self.load_mask_btn.setEnabled(True)
+        self.auto_run_ckbx.setEnabled(True)
+        # Run is usable only in manual mode (auto-run off).
+        self.run_button.setEnabled(not self.auto_run_ckbx.isChecked())
+
+    def _restore_remote_mode(self) -> bool:
+        """Return the startup remote/local mode from saved settings.
+
+        Remote-only installs are always remote. Otherwise honour the last-used mode
+        ("inference_mode" in QSettings), defaulting to local when nothing is saved.
+        """
+        if not self._local_available:
+            return True
+        return self._settings.value("inference_mode", "local", type=str) == "remote"
 
     def _clear_layers(self):
         """Abstract function to clear all needed layers"""
@@ -301,13 +320,13 @@ class BaseGUI(QWidget):
         """Initializes the model selection as a combo box."""
         _group_box, _layout = setup_vgroupbox(text="Model Selection:")
 
-        # Local | Remote mode switch. Start on Remote when local inference is not
-        # installed, since Local cannot be used in that case.
+        # Local | Remote mode switch. Defaults to the last-used mode (see
+        # _restore_remote_mode); always Remote when local inference is not installed.
         self.mode_switch = setup_hswitch(
             _layout,
             options=["Local", "Remote"],
             function=self.on_mode_switched,
-            default=0 if self._local_available else 1,
+            default=1 if self._remote_mode else 0,
             fixed_color="rgb(0,100, 167)",
             tooltips="Run inference locally or on a remote nninteractive-server",
         )
@@ -753,6 +772,38 @@ class BaseGUI(QWidget):
         _group_box.setLayout(_layout)
         return _group_box
 
+    def _init_manual_control(self) -> QGroupBox:
+        """Manual Control (Interact tab): opt out of auto-run and predict on demand.
+
+        With 'Auto run' checked (the default) every interaction immediately runs a
+        prediction. Uncheck it to accumulate prompts (sent to the backend with
+        run_prediction=False) and run the prediction only when the Run button is
+        pressed. The Run button is enabled only while auto-run is off."""
+        _group_box, _layout = setup_vcollapsiblegroupbox(text="Manual Control:", collapsed=True)
+
+        self.auto_run_ckbx = setup_checkbox(
+            _layout,
+            "Auto run",
+            True,
+            function=self.on_auto_run_toggled,
+            tooltips="Run a prediction automatically after each interaction. "
+            "Uncheck to trigger the prediction manually with the Run button.",
+        )
+
+        self.run_button = setup_iconbutton(
+            _layout,
+            "Run",
+            "right_arrow",
+            self._viewer.theme,
+            self.on_run,
+            tooltips="Run the prediction on the prompts added since the last run",
+        )
+        # Only usable when auto-run is off (and a session is live; see _lock_session).
+        self.run_button.setEnabled(False)
+
+        _group_box.setLayout(_layout)
+        return _group_box
+
     def _init_inference_options(self) -> QGroupBox:
         """Inference-time options for the Settings tab (currently just Auto-zoom)."""
         _group_box, _layout = setup_vgroupbox(text="Inference:")
@@ -965,6 +1016,13 @@ class BaseGUI(QWidget):
 
     def on_load_mask(self):
         pass
+
+    def on_auto_run_toggled(self, *args, **kwargs) -> None:
+        """Enable the Run button only when auto-run is off and a session is live."""
+        self.run_button.setEnabled(self._session_locked and not self.auto_run_ckbx.isChecked())
+
+    def on_run(self, *args, **kwargs) -> None:
+        """Placeholder for the manual Run button (subclasses trigger the prediction)."""
 
     def _export(self) -> None:
         """Placeholder method for exporting all generated label layers"""

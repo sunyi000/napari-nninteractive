@@ -841,6 +841,8 @@ class nnInteractiveWidget(LayerControls):
         if self._remote_connected:
             self._disconnect_remote()
         self._remote_mode = self.mode_switch.index == 1
+        # Remember the choice so the next session starts in the same mode.
+        self._settings.setValue("inference_mode", "remote" if self._remote_mode else "local")
         self.local_container.setVisible(not self._remote_mode)
         self.remote_container.setVisible(self._remote_mode)
         # Any toggle resets the switch button styles; restore the greyed Local look.
@@ -1047,9 +1049,10 @@ class nnInteractiveWidget(LayerControls):
 
             if data is not None:
                 _prompt = self.prompt_button.index == 0
-                # Manual Control was removed, so prediction always runs automatically
-                # after an interaction is added.
-                _auto_run = True
+                # Auto run (default) predicts after each interaction. When it is off
+                # (Manual Control), prompts are added with run_prediction=False and the
+                # prediction is triggered later by the Run button (on_run).
+                _auto_run = self.auto_run_ckbx.isChecked()
 
                 # add_*_interaction returns the backend's changed-region bbox (clipped,
                 # directly sliceable), or None when it cannot be localized. We accumulate it
@@ -1077,10 +1080,31 @@ class nnInteractiveWidget(LayerControls):
                     self._handle_session_expired()
                     return
 
-                self._accumulate_object_bbox(changed_bbox)
+                # In manual mode no prediction ran (changed_bbox is None); leave the
+                # object bbox and label untouched until on_run triggers the prediction.
+                if _auto_run:
+                    self._accumulate_object_bbox(changed_bbox)
                 # Record which layer holds this interaction's marker so on_undo can remove it.
                 self._interaction_history.append(_layer_name)
-                self._viewer.layers[self.label_layer_name].refresh()
+                if _auto_run:
+                    self._viewer.layers[self.label_layer_name].refresh()
+
+    def on_run(self):
+        """Manually trigger a prediction on the prompts accumulated since the last run.
+
+        Used when auto-run is off (Manual Control): interactions were added with
+        run_prediction=False, so nothing has been predicted yet. This runs the
+        prediction once over all accumulated prompts and shows the result.
+        """
+        if self.session is None:
+            return
+        try:
+            changed_bbox = self.session._predict()
+        except _SESSION_LOST_ERRORS:
+            self._handle_session_expired()
+            return
+        self._accumulate_object_bbox(changed_bbox)
+        self._viewer.layers[self.label_layer_name].refresh()
 
     def on_undo(self):
         """Undo the most recent interaction for the current object.
