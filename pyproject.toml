@@ -1,6 +1,6 @@
 [project]
 name = "napari-nninteractive"
-version = "2.5.2"
+version = "2.5.3"
 description = "nnInteractive plugin for Napari"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -39,7 +39,7 @@ dependencies = [
     # Torch-free remote client + shared wire protocol (pulls numpy/httpx/blosc2).
     # Provides nnInteractive.inference.remote; the full nnInteractive package (added
     # by [local]) depends on this same client, so the two coexist cleanly.
-    "nninteractive-client>=2.5.0",
+    "nninteractive-client>=2.5.1",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +48,7 @@ dependencies = [
 # the matching CUDA build of torch first (see the README), then:
 #   pip install "napari-nninteractive[local]"
 local = [
-    "nnInteractive>=2.5.0",
+    "nnInteractive>=2.5.1",
 ]
 testing = [
     "tox",
