@@ -294,11 +294,7 @@ class nnInteractiveWidget(LayerControls):
             }
         )
 
-        _layer = self._viewer.layers[self.session_cfg["name"]]
-        _data = _layer.data
-        if _layer.multiscale:
-            _data = _data[self.session_cfg.get("level", 0)]
-
+        _data = self._viewer.layers[self.session_cfg["name"]].data
         _data = np.asarray(_data)
         _data = _data[np.newaxis, ...]
 
@@ -820,6 +816,7 @@ class nnInteractiveWidget(LayerControls):
         self._store_in_progress_segmentation()
         self.session = None
         self._clear_layers()
+        self._restore_source_visibility()
         self._unlock_session()
         return True
 
@@ -837,6 +834,7 @@ class nnInteractiveWidget(LayerControls):
         else:
             self.session = None
         self._clear_layers()
+        self._restore_source_visibility()
         self._unlock_session()
         # No tool is active after teardown; restore the default canvas cursor.
         self._refresh_prompt_cursor()
