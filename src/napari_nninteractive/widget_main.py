@@ -9,7 +9,7 @@ import numpy as np
 from napari.qt.threading import create_worker
 from napari.utils.notifications import show_warning
 from napari.viewer import Viewer
-from qtpy.QtCore import QEvent, Qt
+from qtpy.QtCore import QEvent, Qt, QTimer
 from qtpy.QtWidgets import (
     QApplication,
     QDialog,
