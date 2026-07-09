@@ -143,6 +143,28 @@ def _find_cudnn_conflict(bundled_ver_int, cudnn_dir, search_dirs):
                     return sys_ver, cand
     return None
 
+    def _release_volume_textures(self) -> None:
+        """Free the 3D volume textures vispy keeps after leaving 3D view.
+
+        """
+        if self._viewer.dims.ndisplay != 2:
+            return
+        try:
+            canvas = self._viewer.window._qt_viewer.canvas
+            visuals = canvas.layer_to_visual
+        except AttributeError:
+            return
+        dummy = np.zeros((1, 1, 1), dtype=np.float32)
+        for vispy_layer in list(visuals.values()):
+            layer_node = getattr(vispy_layer, "_layer_node", None)
+            volume = getattr(layer_node, "_volume_node", None)
+            if volume is None:
+                continue
+            try:
+                volume.set_data(dummy, clim=(0.0, 1.0))
+            except Exception:  # noqa: BLE001 - never break rendering over cleanup
+                continue
+        canvas.native.update()  # GL commands run on the next draw
 
 class nnInteractiveWidget(LayerControls):
     """
@@ -200,7 +222,10 @@ class nnInteractiveWidget(LayerControls):
         # re-submitted, unchanged path be a no-op instead of an uninitialize.
         self._active_checkpoint_text = None
         self._viewer.dims.events.order.connect(self.on_axis_change)
-
+        
+        self._viewer.dims.events.ndisplay.connect(
+            lambda e: QTimer.singleShot(0, self._release_volume_textures)
+        )
         # Belt-and-suspenders lease release on shutdown. closeEvent on this
         # widget does NOT fire reliably when napari quits (the dock widget
         # tree is destroyed without per-child closeEvent), and the Ctrl+Q
